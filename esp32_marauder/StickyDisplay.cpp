@@ -7,6 +7,7 @@
 #include <cstring>
 
 extern SPIClass sharedSPI;
+SemaphoreHandle_t g_spiBusMutex = nullptr;
 namespace {
 constexpr int kCs = 15, kDc = 16, kReset = 17, kBusy = 18;
 constexpr int kTouchReset = 41, kTouchInt = 21;
@@ -38,6 +39,7 @@ void StickyDisplay::prepareBoard() {
 }
 
 void StickyDisplay::init() {
+  if (!g_spiBusMutex) g_spiBusMutex = xSemaphoreCreateMutex();
   if (initialized_) return; // Marauder calls init again on menu transitions.
   prepareBoard();
   pinMode(kDc, OUTPUT); pinMode(kReset, OUTPUT); pinMode(kBusy, INPUT);
@@ -134,6 +136,8 @@ void StickyDisplay::workerEntry(void* argument) {
 }
 
 void StickyDisplay::command(uint8_t cmd, const uint8_t* data, size_t len) {
+  SpiBusGuard guard;
+  digitalWrite(8, HIGH);
   sharedSPI.beginTransaction(SPISettings(kSpiHz, MSBFIRST, SPI_MODE0));
   digitalWrite(kCs, LOW); digitalWrite(kDc, LOW);
   sharedSPI.transfer(cmd);
@@ -163,6 +167,8 @@ void StickyDisplay::setWindow(const sticky::Area& a) {
 
 void StickyDisplay::writePlane(uint8_t cmd, const uint8_t* frame, const sticky::Area& a) {
   setWindow(a);
+  SpiBusGuard guard;
+  digitalWrite(8, HIGH);
   sharedSPI.beginTransaction(SPISettings(kSpiHz, MSBFIRST, SPI_MODE0));
   digitalWrite(kCs, LOW); digitalWrite(kDc, LOW); sharedSPI.transfer(cmd);
   digitalWrite(kDc, HIGH);

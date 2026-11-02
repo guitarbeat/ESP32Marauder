@@ -4,7 +4,21 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <atomic>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include "StickyModel.h"
+
+extern SemaphoreHandle_t g_spiBusMutex;
+
+class SpiBusGuard {
+ public:
+  SpiBusGuard() {
+    if (g_spiBusMutex) xSemaphoreTake(g_spiBusMutex, portMAX_DELAY);
+  }
+  ~SpiBusGuard() {
+    if (g_spiBusMutex) xSemaphoreGive(g_spiBusMutex);
+  }
+};
 
 #define TFT_BLACK       0x0000
 #define TFT_NAVY        0x000F

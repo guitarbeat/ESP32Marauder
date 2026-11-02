@@ -11,6 +11,9 @@
 #ifdef HAS_SD
   #include "SDInterface.h"
 #endif
+#ifdef MARAUDER_RETERMINAL_STICKY
+  #include "StickyDisplay.h"
+#endif
 
 extern LinkedList<AccessPoint>* access_points;
 extern LinkedList<Station>* stations;
@@ -113,10 +116,38 @@ bool ReconMission::start(ReconMode mode) {
     session_dir[0] = '\0';
     if (sd_obj.supported) {
       SD.mkdir("/recon");
-      for (uint16_t index = 0; index < 10000; index++) {
-        snprintf(session_dir, sizeof(session_dir), "/recon/m%04u", index);
-        if (!SD.exists(session_dir) && SD.mkdir(session_dir)) break;
+      uint16_t max_index = 0;
+      bool found_any = false;
+      File recon_root = SD.open("/recon");
+      if (recon_root) {
+        File entry;
+        while ((entry = recon_root.openNextFile())) {
+          if (entry.isDirectory()) {
+            const char* name = entry.name();
+            const char* p = strrchr(name, '/');
+            p = p ? p + 1 : name;
+            if (p[0] == 'm' && strlen(p) == 5) {
+              uint16_t idx = (uint16_t)atoi(p + 1);
+              if (idx >= max_index) {
+                max_index = idx;
+                found_any = true;
+              }
+            }
+          }
+          entry.close();
+        }
+        recon_root.close();
+      }
+      uint16_t next_index = found_any ? (max_index + 1) : 0;
+      snprintf(session_dir, sizeof(session_dir), "/recon/m%04u", next_index);
+      if (!SD.mkdir(session_dir)) {
+        // Fallback defensive attempt in case next_index already exists
         session_dir[0] = '\0';
+        for (uint16_t retry = next_index; retry < next_index + 10; retry++) {
+          snprintf(session_dir, sizeof(session_dir), "/recon/m%04u", retry);
+          if (!SD.exists(session_dir) && SD.mkdir(session_dir)) break;
+          session_dir[0] = '\0';
+        }
       }
       if (session_dir[0]) buffer_obj.setDirectory(session_dir);
     }
@@ -343,6 +374,9 @@ void ReconMission::queueProbe(const uint8_t mac[6], int8_t rssi, uint8_t channel
 }
 
 void ReconMission::writeProbe(const ReconProbeEvent& event) {
+#ifdef MARAUDER_RETERMINAL_STICKY
+  SpiBusGuard guard;
+#endif
   probe_count++;
   char label[13] = {};
   memcpy(label, event.name, min(event.name_length, static_cast<uint8_t>(sizeof(label) - 1)));

@@ -417,7 +417,8 @@ void MenuFunctions::main(uint32_t currentTime)
     #if defined(MARAUDER_V8)
       if (wifi_scan_obj.currentScanMode != WIFI_SCAN_CSI_MOTION)
     #endif
-    display_obj.displayBuffer();
+    if (!recon_obj.suppressScanUi())
+      display_obj.displayBuffer();
 
 
   int pre_getTouch = millis();
